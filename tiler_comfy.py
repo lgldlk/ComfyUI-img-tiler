@@ -6,10 +6,8 @@ from collections import defaultdict
 from tqdm import tqdm
 from multiprocessing import Pool
 import math
-import pickle
-import conf
-from time import sleep
-
+from  .  import conf
+from .utils import torch_tensor_to_cv2_image,cv2_image_to_torch_tensor
 
 # number of colors per image
 COLOR_DEPTH = conf.COLOR_DEPTH
@@ -178,34 +176,34 @@ def create_tiled_image(boxes, res):
     return img
 
 
-# main
-def main():
-    if len(sys.argv) > 1:
-        image_path = sys.argv[1]
-    else:
-        image_path = conf.IMAGE_TO_TILE
+# # main
+# def main():
+#     if len(sys.argv) > 1:
+#         image_path = sys.argv[1]
+#     else:
+#         image_path = conf.IMAGE_TO_TILE
 
-    if len(sys.argv) > 2:
-        tiles_paths = sys.argv[2:]
-    else:
-        tiles_paths = conf.TILES_FOLDER.split(' ')
+#     if len(sys.argv) > 2:
+#         tiles_paths = sys.argv[2:]
+#     else:
+#         tiles_paths = conf.TILES_FOLDER.split(' ')
 
-    if not os.path.exists(image_path):
-        print('Image not found')
-        exit(-1)
-    for path in tiles_paths:
-        if not os.path.exists(path):
-            print('Tiles folder not found')
-            exit(-1)
+#     if not os.path.exists(image_path):
+#         print('Image not found')
+#         exit(-1)
+#     for path in tiles_paths:
+#         if not os.path.exists(path):
+#             print('Tiles folder not found')
+#             exit(-1)
 
-    tiles = load_tiles(tiles_paths)
-    boxes, original_res = get_processed_image_boxes(image_path, tiles)
-    img = create_tiled_image(boxes, original_res, render=conf.RENDER)
-    cv2.imwrite(conf.OUT, img)
+#     tiles = load_tiles(tiles_paths)
+#     boxes, original_res = get_processed_image_boxes(image_path, tiles)
+#     img = create_tiled_image(boxes, original_res, render=conf.RENDER)
+#     cv2.imwrite(conf.OUT, img)
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
 
 
 class TilerImage:
@@ -220,10 +218,12 @@ class TilerImage:
   RETURN_TYPES = ("IMAGE",)
   RETURN_NAMES = ("image",)
   OUTPUT_IS_LIST = (False,)
-  FUNCTION = "Spilt"
+  FUNCTION = "create_tiled_image"
   CATEGORY = "😱 PointAgiClub"
   def create_tiled_image(self,image):
-    tiles = load_tiles("./tiles/circles/gen_circle_200")
+    image = torch_tensor_to_cv2_image(image)
+    folder_path = os.path.dirname(__file__)
+    tiles = load_tiles(["./tiles/circles/gen_circle_200"])
     boxes, original_res = get_processed_image_boxes(image, tiles)
     img = create_tiled_image(boxes, original_res, render=conf.RENDER)
-    return img
+    return cv2_image_to_torch_tensor(img)

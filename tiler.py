@@ -209,7 +209,6 @@ def main():
         tiles_paths = sys.argv[2:]
     else:
         tiles_paths = conf.TILES_FOLDER.split(' ')
-
     if not os.path.exists(image_path):
         print('Image not found')
         exit(-1)
