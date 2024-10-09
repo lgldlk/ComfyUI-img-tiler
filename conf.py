@@ -24,8 +24,7 @@ RESIZING_SCALES = [0.5, 0.4, 0.3, 0.2, 0.1]
 PIXEL_SHIFT = None#(5, 5)
 # if tiles can overlap
 OVERLAP_TILES = False
-# render image as its being built
-RENDER = False
+
 # multiprocessing pool size
 POOL_SIZE = 8
 

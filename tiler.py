@@ -209,6 +209,7 @@ def main():
         tiles_paths = sys.argv[2:]
     else:
         tiles_paths = conf.TILES_FOLDER.split(' ')
+
     if not os.path.exists(image_path):
         print('Image not found')
         exit(-1)
@@ -216,7 +217,6 @@ def main():
         if not os.path.exists(path):
             print('Tiles folder not found')
             exit(-1)
-
     tiles = load_tiles(tiles_paths)
     boxes, original_res = get_processed_image_boxes(image_path, tiles)
     img = create_tiled_image(boxes, original_res, render=conf.RENDER)

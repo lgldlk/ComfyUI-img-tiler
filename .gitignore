@@ -1,0 +1,11 @@
+dist/
+deploy_versions/
+.temp/
+.rn_temp/
+node_modules/
+.DS_Store
+.swc
+bin/pkcs8-private-pem
+bin/CIOptions.json
+bin/private*
+.vscode/

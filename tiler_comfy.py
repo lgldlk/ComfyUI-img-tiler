@@ -7,25 +7,22 @@ from tqdm import tqdm
 from multiprocessing import Pool
 import math
 from  .  import conf
-from .utils import torch_tensor_to_cv2_image,cv2_image_to_torch_tensor
+from .utils import torch_tensor_to_cv2_image,color_quantization,cv2_image_to_torch_tensor,get_all_directories
+import re
+import json
 
 # number of colors per image
 COLOR_DEPTH = conf.COLOR_DEPTH
-# image scale
-IMAGE_SCALE = conf.IMAGE_SCALE
-# tiles scales
-RESIZING_SCALES = conf.RESIZING_SCALES
+
+
 # number of pixels shifted to create each box (x,y)
 PIXEL_SHIFT = conf.PIXEL_SHIFT
 # multiprocessing pool size
 POOL_SIZE = conf.POOL_SIZE
-# if tiles can overlap
-OVERLAP_TILES = conf.OVERLAP_TILES
 
 
-# reduces the number of colors in an image
-def color_quantization(img, n_colors):
-    return np.round(img / 255 * n_colors) / n_colors * 255
+
+
 
 
 # returns an image given its path
@@ -34,7 +31,6 @@ def read_image(path):
     if img.shape[2] == 3:
         img = cv2.cvtColor(img, cv2.COLOR_BGR2BGRA)
     img = color_quantization(img.astype('float'), COLOR_DEPTH)
-    # scale the image according to IMAGE_SCALE, if this is the main image
     return img.astype('uint8')
 
 
@@ -70,7 +66,7 @@ def mode_color(img, ignore_alpha=False):
 
 
 # load and process the tiles
-def load_tiles(paths):
+def load_tiles(paths,resizing_scales):
     print('Loading tiles')
     tiles = defaultdict(list)
 
@@ -80,7 +76,7 @@ def load_tiles(paths):
                 tile = read_image(os.path.join(path, tile_name))
                 mode, rel_freq = mode_color(tile, ignore_alpha=True)
                 if mode is not None:
-                    for scale in RESIZING_SCALES:
+                    for scale in resizing_scales:
                         t = resize_image(tile, scale)
                         res = tuple(t.shape[:2])
                         tiles[res].append({
@@ -155,23 +151,23 @@ def get_processed_image_boxes(img, tiles):
 
 
 # places a tile in the image
-def place_tile(img, box):
+def place_tile(img, box,overlap_tiles):
     p1 = np.flip(box['pos'])
     p2 = p1 + box['img'].shape[:2]
     img_box = img[p1[0]:p2[0], p1[1]:p2[1]]
     mask = box['tile'][:, :, 3] != 0
     mask = mask[:img_box.shape[0], :img_box.shape[1]]
-    if OVERLAP_TILES or not np.any(img_box[mask]):
+    if overlap_tiles or not np.any(img_box[mask]):
         img_box[mask] = box['tile'][:img_box.shape[0], :img_box.shape[1], :][mask]
 
 
 # tiles the image
-def create_tiled_image(boxes, res):
+def create_tiled_image(boxes, res,overlap_tiles):
     print('Creating tiled image')
     img = np.zeros(shape=(res[0], res[1], 4), dtype=np.uint8)
 
-    for box in tqdm(sorted(boxes, key=lambda x: x['min_dist'], reverse=OVERLAP_TILES)):
-        place_tile(img, box)
+    for box in tqdm(sorted(boxes, key=lambda x: x['min_dist'], reverse=overlap_tiles)):
+        place_tile(img, box,overlap_tiles)
 
     return img
 
@@ -205,25 +201,81 @@ def create_tiled_image(boxes, res):
 # if __name__ == "__main__":
 #     main()
 
+now_folder_path = os.path.dirname(__file__)
 
+
+tilesList=[]
+for dir in get_all_directories(
+    os.path.join(now_folder_path,"tiles")
+):
+  dir_res=re.search(r"[\\|\/]gen_(.*)",dir)
+  if dir_res:
+    tilesList.append({
+      "name":dir_res.group(1),
+      "path":dir
+    })
+
+
+class TilerSelect:
+  @classmethod
+  def INPUT_TYPES(cls):
+    select_tile_options=[]
+    for tile in tilesList:
+      select_tile_options.append(tile["name"])
+    return {
+      "required": {
+        "tile": (select_tile_options,
+                          {"default": "square_50"}),
+      }
+    }
+  RETURN_TYPES = ("SelectTile",)
+  RETURN_NAMES = ("tile",)
+  OUTPUT_IS_LIST = (False,)
+  FUNCTION = "run_tile"
+  CATEGORY = "😱 PointAgiClub"
+  def run_tile(self,tile):
+    result = next((x for x in tilesList if x["name"] == tile), None)
+    return (result,)
+    
 class TilerImage:
   @classmethod
   def INPUT_TYPES(cls):
     return {
       "required": {
-        "image":("IMAGE",)
+        "image":("IMAGE",),
+        "overlap_tiles":("BOOLEAN",{
+            "default":False
+        }),
+        # RESIZING_SCALES
+        "resizing_scales":("STRING",{
+            "default":"[0.5, 0.4, 0.3, 0.2, 0.1]"
+        }),
+        "tile1":("SelectTile",),
       }
     }
-  
   RETURN_TYPES = ("IMAGE",)
   RETURN_NAMES = ("image",)
   OUTPUT_IS_LIST = (False,)
   FUNCTION = "create_tiled_image"
   CATEGORY = "😱 PointAgiClub"
-  def create_tiled_image(self,image):
+  def create_tiled_image(self,image,overlap_tiles,resizing_scales,**kwargs):
+    tiles = []
+
+    for k, v in kwargs.items():
+            tiles.append(v['path'])
     image = torch_tensor_to_cv2_image(image)
-    folder_path = os.path.dirname(__file__)
-    tiles = load_tiles(["./tiles/circles/gen_circle_200"])
+    try:
+      resizing_scales = json.loads(resizing_scales)
+      for scale in resizing_scales:
+        if not isinstance(scale, float):
+          raise ValueError("Invalid resizing_scales, required a list of floats")
+    except:
+        raise ValueError("Invalid resizing_scales, required a list of floats")
+    
+    
+    tiles = load_tiles(tiles,resizing_scales)
     boxes, original_res = get_processed_image_boxes(image, tiles)
-    img = create_tiled_image(boxes, original_res, render=conf.RENDER)
-    return cv2_image_to_torch_tensor(img)
+    img = create_tiled_image(boxes, original_res,overlap_tiles)
+    res=cv2_image_to_torch_tensor(img)
+    return (res,)
+

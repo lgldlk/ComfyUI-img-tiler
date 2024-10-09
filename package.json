@@ -1,0 +1,14 @@
+{
+  "name": "ComfyUI-imagTiler",
+  "version": "1.0.0",
+  "description": "",
+  "main": ".eslintrc.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "chenke",
+  "license": "ISC",
+  "dependencies": {
+    "eslint": "^9.12.0"
+  }
+}
