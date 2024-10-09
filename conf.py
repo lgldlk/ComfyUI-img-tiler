@@ -2,7 +2,7 @@
 
 # number of divisions per channel (R, G and B)
 # DEPTH = 4 -> 4 * 4 * 4 = 64 colors
-DEPTH = 8
+DEPTH = 6
 # list of rotations, in degrees, to apply over the original image
 ROTATIONS = [0]
 

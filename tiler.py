@@ -6,7 +6,6 @@ from collections import defaultdict
 from tqdm import tqdm
 from multiprocessing import Pool
 import math
-import pickle
 import conf
 from time import sleep
 
@@ -54,6 +53,8 @@ def mode_color(img, ignore_alpha=False):
     total = 0
     for y in img:
         for x in y:
+            if sum(x) == 0:
+                continue
             if len(x) < 4 or ignore_alpha or x[3] != 0:
                 counter[tuple(x[:3])] += 1
             else:
@@ -99,13 +100,6 @@ def load_tiles(paths):
                             'rel_freq': rel_freq
                         })
 
-            with open('tiles.pickle', 'wb') as f:
-                pickle.dump(tiles, f)
-
-        # load pickle with tiles (one file only)
-        else:
-            with open(path, 'rb') as f:
-                tiles = pickle.load(f)
 
     return tiles
 
@@ -185,15 +179,12 @@ def place_tile(img, box):
 
 
 # tiles the image
-def create_tiled_image(boxes, res, render=False):
+def create_tiled_image(boxes, res):
     print('Creating tiled image')
     img = np.zeros(shape=(res[0], res[1], 4), dtype=np.uint8)
 
     for box in tqdm(sorted(boxes, key=lambda x: x['min_dist'], reverse=OVERLAP_TILES)):
         place_tile(img, box)
-        if render:
-            show_image(img, wait=False)
-            sleep(0.025)
 
     return img
 
@@ -219,7 +210,7 @@ def main():
             exit(-1)
     tiles = load_tiles(tiles_paths)
     boxes, original_res = get_processed_image_boxes(image_path, tiles)
-    img = create_tiled_image(boxes, original_res, render=conf.RENDER)
+    img = create_tiled_image(boxes, original_res, )
     cv2.imwrite(conf.OUT, img)
 
 
