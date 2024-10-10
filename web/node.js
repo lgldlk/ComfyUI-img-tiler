@@ -17,20 +17,9 @@ app.registerExtension({
         console.log(arguments);
         window.aaa = this;
 
-        if (!link_info || link_info?.type !== "SelectTile") return;
-
-        let slot_i = 1;
-        for (let i = 0; i < this.inputs.length; i++) {
-          let input_i = this.inputs[i];
-          if (input_i.name.match("tile")) {
-            input_i.name = `${input_name}${slot_i}`;
-            slot_i++;
-          }
-        }
-
-        const converted_count = 2;
-
-        if (!connected && this.inputs.length > converted_count) {
+        if (!link_info || link_info?.type !== "Pc_Tiles") return;
+        const tileInput = this.inputs.filter((item) => item.name.match("tile"));
+        if (!connected && tileInput.length > 1) {
           const stackTrace = new Error().stack;
           if (
             !stackTrace.includes("LGraphNode.prototype.connect") &&
@@ -41,14 +30,16 @@ app.registerExtension({
             this.removeInput(index);
           }
         }
+        let slot_i = 1;
+
+        tileInput.map((item) => {
+          item.name = `${input_name}${slot_i++}`;
+        });
 
         let last_slot = this.inputs[this.inputs.length - 1];
         console.log(JSON.parse(JSON.stringify(last_slot)));
         if (last_slot.link != undefined) {
-          this.addInput(
-            `${input_name}${slot_i}`,
-            this.inputs.find((item) => item.name.match("tile")).type
-          );
+          this.addInput(`${input_name}${slot_i}`, tileInput[0].type);
         }
       };
     }

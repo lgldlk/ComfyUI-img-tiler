@@ -53,7 +53,7 @@ def mode_color(img, ignore_alpha=False):
     total = 0
     for y in img:
         for x in y:
-            if sum(x) == 0:
+            if np.sum(x, dtype=np.int64) == 0:
                 continue
             if len(x) < 4 or ignore_alpha or x[3] != 0:
                 counter[tuple(x[:3])] += 1
@@ -99,7 +99,7 @@ def load_tiles(paths):
                             'mode': mode,
                             'rel_freq': rel_freq
                         })
-
+    print('Tiles loaded',tiles)
 
     return tiles
 
