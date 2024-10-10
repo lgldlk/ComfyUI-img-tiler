@@ -113,11 +113,11 @@ def image_boxes(img, res):
 
     boxes = []
     img_height, img_width = img.shape[:2]
-
-    for y in range(0, img_height, shift[1]):
+    w_shift, h_shift = shift
+    for y in range(0, img_height+h_shift, shift[1]):
         for x in range(0, img_width, shift[0]):
-            box_height = min(res[0], img_height - y)  # Handle edge cases for height
-            box_width = min(res[1], img_width - x)  # Handle edge cases for width
+            box_height = (res[0])  # Handle edge cases for height
+            box_width = (res[1])  # Handle edge cases for width
             boxes.append({
                 'img': img[y:y+box_height, x:x+box_width],
                 'pos': (x, y),
@@ -177,9 +177,9 @@ def get_processed_image_boxes(image_path, tiles):
             y_coords.append(y)
             
             # 在图像上绘制每个 box 的坐标
-            cv2.circle(img, (x, y), radius=5, color=(255, 0, 0), thickness=-1) 
+            # cv2.circle(img, (x, y), radius=5, color=(255, 0, 0), thickness=-1) 
             # 随机生成边框颜色 (RGB)
-            random_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            random_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255),1.0)
             
             # 在图像上绘制 box 的矩形边框，左上角为 (x, y)，右下角为 (x + width, y + height)
             cv2.rectangle(img, (x, y), (x + width, y + height), color=random_color, thickness=2)
@@ -217,17 +217,70 @@ def create_tiled_image(boxes, res):
     return img
 
 
+# 获取透明区域的 mask
+def get_transparent_mask(img):
+    # Alpha channel is the 4th channel, i.e., index 3
+    alpha_channel = img[:, :, 3]
+    # Find the transparent areas where alpha is 0
+    transparent_mask = alpha_channel == 0
+    return transparent_mask
+
+# 使用透明区域 mask 创建图像
+def create_masked_image(img, mask):
+    masked_img = np.zeros_like(img)
+    masked_img[mask] = img[mask]
+    return masked_img
+
+# 获取只包含透明区域的 boxes
+def get_transparent_boxes(img, res):
+    print('Getting transparent boxes')
+    # 获取透明区域的 mask
+    transparent_mask = get_transparent_mask(img)
+    transparent_img = create_masked_image(img, transparent_mask)
+    boxes = image_boxes(transparent_img, res)
+    return boxes
+
+# 第二次填充透明区域
+def fill_transparent_areas(img, tiles):
+    print("Filling transparent areas")
+    pool = Pool(POOL_SIZE)
+
+    all_boxes = []
+    for res, ts in tqdm(sorted(tiles.items(), reverse=True)):
+        # 获取只包含透明区域的 boxes
+        boxes = get_transparent_boxes(img, res)
+        
+        # 获取每个 box 的主色调和最相似的瓦片
+        modes = pool.map(mode_color, [x['img'] for x in boxes])
+        most_similar_tiles = pool.starmap(most_similar_tile, zip(modes, [ts for x in range(len(modes))]))
+
+        i = 0
+        for min_dist, tile in most_similar_tiles:
+            boxes[i]['min_dist'] = min_dist
+            boxes[i]['tile'] = tile
+            i += 1
+
+        all_boxes += boxes
+
+    # 对新生成的 boxes 进行填充
+    img = create_tiled_image(all_boxes, img.shape)
+    return img
+
 # main
 def main():
-    if len(sys.argv) > 1:
-        image_path = sys.argv[1]
-    else:
-        image_path = conf.IMAGE_TO_TILE
+    print(sys.argv,len(sys.argv))
+    image_path='images/test.jpg'
+    tiles_paths=['./tiles/lego/gen_lego_v']
 
-    if len(sys.argv) > 2:
-        tiles_paths = sys.argv[2:]
-    else:
-        tiles_paths = conf.TILES_FOLDER.split(' ')
+    # if len(sys.argv) > 1:
+    #     image_path = sys.argv[1]
+    # else:
+    #     image_path = conf.IMAGE_TO_TILE
+
+    # if len(sys.argv) > 2:
+    #     tiles_paths = sys.argv[2:]
+    # else:
+    #     tiles_paths = conf.TILES_FOLDER.split(' ')
 
     if not os.path.exists(image_path):
         print('Image not found')
@@ -239,6 +292,9 @@ def main():
     tiles = load_tiles(tiles_paths)
     boxes, original_res = get_processed_image_boxes(image_path, tiles)
     img = create_tiled_image(boxes, original_res, )
+
+    # 提取透明区域，并对这些区域重新获取 boxes 进行瓦片填充
+    img = fill_transparent_areas(img, tiles)
     cv2.imwrite(conf.OUT, img)
 
 
