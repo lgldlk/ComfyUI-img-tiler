@@ -8,4 +8,3 @@ node_modules/
 bin/pkcs8-private-pem
 bin/CIOptions.json
 bin/private*
-.vscode/
