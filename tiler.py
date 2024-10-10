@@ -8,6 +8,7 @@ from multiprocessing import Pool
 import math
 import conf
 from time import sleep
+import random
 
 
 # number of colors per image
@@ -99,7 +100,6 @@ def load_tiles(paths):
                             'mode': mode,
                             'rel_freq': rel_freq
                         })
-    print('Tiles loaded',tiles)
 
     return tiles
 
@@ -112,11 +112,16 @@ def image_boxes(img, res):
         shift = PIXEL_SHIFT
 
     boxes = []
-    for y in range(0, img.shape[0], shift[1]):
-        for x in range(0, img.shape[1], shift[0]):
+    img_height, img_width = img.shape[:2]
+
+    for y in range(0, img_height, shift[1]):
+        for x in range(0, img_width, shift[0]):
+            box_height = min(res[0], img_height - y)  # Handle edge cases for height
+            box_width = min(res[1], img_width - x)  # Handle edge cases for width
             boxes.append({
-                'img': img[y:y+res[0], x:x+res[1]],
-                'pos': (x,y)
+                'img': img[y:y+box_height, x:x+box_width],
+                'pos': (x, y),
+                'size': (box_width, box_height) 
             })
 
     return boxes
@@ -147,9 +152,11 @@ def most_similar_tile(box_mode_freq, tiles):
 # builds the boxes and finds the best tile for each one
 def get_processed_image_boxes(image_path, tiles):
     print('Getting and processing boxes')
-    img = read_image(image_path, mainImage=True)
+    img = read_image(image_path, mainImage=True)  # Assuming `read_image` uses cv2.imread or similar method
     pool = Pool(POOL_SIZE)
     all_boxes = []
+    x_coords = []
+    y_coords = []
 
     for res, ts in tqdm(sorted(tiles.items(), reverse=True)):
         boxes = image_boxes(img, res)
@@ -160,10 +167,28 @@ def get_processed_image_boxes(image_path, tiles):
         for min_dist, tile in most_similar_tiles:
             boxes[i]['min_dist'] = min_dist
             boxes[i]['tile'] = tile
+            
+            # 假设每个 box 包含 'x' 和 'y' 坐标
+            x = boxes[i]['pos'][0]
+            y = boxes[i]['pos'][1]
+            width = boxes[i]['size'][0]
+            height = boxes[i]['size'][1]
+            x_coords.append(x)
+            y_coords.append(y)
+            
+            # 在图像上绘制每个 box 的坐标
+            cv2.circle(img, (x, y), radius=5, color=(255, 0, 0), thickness=-1) 
+            # 随机生成边框颜色 (RGB)
+            random_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            
+            # 在图像上绘制 box 的矩形边框，左上角为 (x, y)，右下角为 (x + width, y + height)
+            cv2.rectangle(img, (x, y), (x + width, y + height), color=random_color, thickness=2)
             i += 1
 
         all_boxes += boxes
 
+    # 保存处理后的图像
+    cv2.imwrite('./out2.png', img)
     return all_boxes, img.shape
 
 
@@ -172,8 +197,11 @@ def place_tile(img, box):
     p1 = np.flip(box['pos'])
     p2 = p1 + box['img'].shape[:2]
     img_box = img[p1[0]:p2[0], p1[1]:p2[1]]
+    
+
+    # Apply mask only if the alpha channel is not zero
     mask = box['tile'][:, :, 3] != 0
-    mask = mask[:img_box.shape[0], :img_box.shape[1]]
+    mask = mask[:img_box.shape[0], :img_box.shape[1]]  # Adjust mask size to fit img_box
     if OVERLAP_TILES or not np.any(img_box[mask]):
         img_box[mask] = box['tile'][:img_box.shape[0], :img_box.shape[1], :][mask]
 
