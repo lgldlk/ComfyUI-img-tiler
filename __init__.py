@@ -17,7 +17,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "PC TilerSelect":"TilerSelect",
     "PC TileMaker":"TileMaker",
     "PC ImageListTileMaker":"ImageListTileMaker",
-    "PC TEST":PC_TEST,
+    "PC TEST":"PC_TEST",
 }
 
 WEB_DIRECTORY='./web'
