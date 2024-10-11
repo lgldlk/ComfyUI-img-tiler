@@ -1,4 +1,5 @@
 
+import itertools
 import os
 from collections import defaultdict
 import cv2
@@ -11,7 +12,9 @@ import math
 import torch
 from PIL import Image, ImageEnhance
 from  .  import conf
-
+from collections import Counter
+import comfy.utils
+from decimal import Decimal, getcontext
 
 # number of colors per image
 COLOR_DEPTH = conf.COLOR_DEPTH
@@ -82,11 +85,14 @@ def load_tiles(paths,resizing_scales):
                 if mode is not None:
                     for scale in resizing_scales:
                         t = resize_image(tile, scale)
-                        res = tuple(t.shape[:2])
-                        tiles[res].append({
+                        # res = tuple(t.shape[:2])
+                        tiles[(
+                            Decimal(tile.shape[0])*Decimal(str(scale)),
+                           Decimal( tile.shape[1])*Decimal(str(scale))
+                               )].append({
                             'tile': t,
                             'mode': mode,
-                            'rel_freq': rel_freq
+                            "rel_freq":rel_freq 
                         })
 
     return tiles
@@ -100,11 +106,16 @@ def image_boxes(img, res):
         shift = PIXEL_SHIFT
 
     boxes = []
-    for y in range(0, img.shape[0], shift[1]):
-        for x in range(0, img.shape[1], shift[0]):
+    img_height, img_width = img.shape[:2]
+    w_shift, h_shift = (int(shift[0]), int(shift[1]))
+    for y in range(0, img_height, h_shift):
+        for x in range(0, img_width, w_shift):
+            box_height = int(res[0])  # Handle edge cases for height
+            box_width = int(res[1])  # Handle edge cases for width
             boxes.append({
-                'img': img[y:y+res[0], x:x+res[1]],
-                'pos': (x,y)
+                'img': img[y:y+box_height, x:x+box_width],
+                'pos': (x, y),
+                'size': (box_width, box_height) 
             })
 
     return boxes
@@ -164,6 +175,26 @@ def place_tile(img, box,overlap_tiles):
     if overlap_tiles or not np.any(img_box[mask]):
         img_box[mask] = box['tile'][:img_box.shape[0], :img_box.shape[1], :][mask]
 
+def resize_and_crop(image, target_width, target_height):
+    if not isinstance(target_width, int):
+        target_width = int(round(target_width))
+    if not isinstance(target_height, int):
+        target_height = int(round(target_height))
+    original_height, original_width = image.shape[:2]
+    scale_w = target_width / original_width
+    scale_h = target_height / original_height
+    scale = max(scale_w, scale_h) 
+    new_width = int(original_width * scale)
+    new_height = int(original_height * scale)
+
+    resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+
+    start_x = (new_width - target_width) // 2
+    start_y = (new_height - target_height) // 2
+
+    cropped_image = resized_image[start_y:(start_y + target_height), start_x:(start_x + target_width)]
+
+    return cropped_image
 
 # tiles the image
 def create_tiled_image(boxes, res,overlap_tiles):
@@ -179,11 +210,35 @@ def merge_tiles(tiles1, tiles2):
     merged_tiles = defaultdict(list, tiles1)  # 创建一个默认从 tiles1 初始化的 defaultdict
 
     for key, value in tiles2.items():
-        merged_tiles[key].extend(value)  # 如果键相同，则扩展列表
-    
+        merged_tiles[key].extend(value) 
     return merged_tiles
 
 
+def euclidean_distance(point1, point2):
+    return math.sqrt((point1[0] - point2[0]) ** 2 + (point1[1] - point2[1]) ** 2)
+
+def find_most_common_scale(tile_keys):
+    scale_count = defaultdict(int)  
+    non_multiple_sizes = []         
+
+    for size1, size2 in itertools.combinations(tile_keys, 2):
+        h1, w1 = size1
+        h2, w2 = size2
+        if (h2 % h1 == 0 and w2 % w1 == 0) or (h1 % h2 == 0 and w1 % w2 == 0):
+            scale_count[size1] += 1
+            scale_count[size2] += 1
+    filtered_counts = max([count for count, occurrence in Counter(scale_count.values()).items() if occurrence > 1] or [0])
+    if filtered_counts == 0:
+        return None,None
+    most_common_sizes = [size for size, count in scale_count.items() if count == filtered_counts]
+
+    def is_multiple_of_any(size, sizes):
+        return all((size[0] % s[0] == 0 and size[1] % s[1] == 0) or (s[0] % size[0] == 0 and s[1] % size[1] == 0) for s in sizes)
+
+    most_common_sizes = list(filter(lambda x: is_multiple_of_any(x, most_common_sizes), tile_keys))
+    non_multiple_sizes = list(set(tile_keys) - set(most_common_sizes))
+
+    return most_common_sizes, non_multiple_sizes
 
 
 # reduces the number of colors in an image
@@ -218,3 +273,38 @@ def cv2_image_to_torch_tensor(cv2_image):
     modified_image = torch.from_numpy(modified_image).unsqueeze(0)
 
     return modified_image
+
+
+def composite(destination, source, x, y, mask = None, multiplier = 8, resize_source = False):
+    source = source.to(destination.device)
+    if resize_source:
+        source = torch.nn.functional.interpolate(source, size=(destination.shape[2], destination.shape[3]), mode="bilinear")
+
+    source = comfy.utils.repeat_to_batch_size(source, destination.shape[0])
+
+    x = max(-source.shape[3] * multiplier, min(x, destination.shape[3] * multiplier))
+    y = max(-source.shape[2] * multiplier, min(y, destination.shape[2] * multiplier))
+
+    left, top = (x // multiplier, y // multiplier)
+    right, bottom = (left + source.shape[3], top + source.shape[2],)
+
+    if mask is None:
+        mask = torch.ones_like(source)
+    else:
+        mask = mask.to(destination.device, copy=True)
+        mask = torch.nn.functional.interpolate(mask.reshape((-1, 1, mask.shape[-2], mask.shape[-1])), size=(source.shape[2], source.shape[3]), mode="bilinear")
+        mask = comfy.utils.repeat_to_batch_size(mask, source.shape[0])
+
+    # calculate the bounds of the source that will be overlapping the destination
+    # this prevents the source trying to overwrite latent pixels that are out of bounds
+    # of the destination
+    visible_width, visible_height = (destination.shape[3] - left + min(0, x), destination.shape[2] - top + min(0, y),)
+
+    mask = mask[:, :, :visible_height, :visible_width]
+    inverse_mask = torch.ones_like(mask) - mask
+
+    source_portion = mask * source[:, :, :visible_height, :visible_width]
+    destination_portion = inverse_mask  * destination[:, :, top:bottom, left:right]
+
+    destination[:, :, top:bottom, left:right] = source_portion + destination_portion
+    return destination

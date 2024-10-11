@@ -18,7 +18,7 @@ COLOR_DEPTH = 32
 # Scale of the image to be tiled (1 = default resolution)
 IMAGE_SCALE = 1
 # tiles scales (1 = default resolution)
-RESIZING_SCALES = [0.5, 0.4, 0.3, ]
+RESIZING_SCALES = [0.6, 0.3,0.12, 0.1,]
 # number of pixels shifted to create each box (tuple with (x,y))
 # if value is None, shift will be done accordingly to tiles dimensions
 PIXEL_SHIFT =None #(5, 5)

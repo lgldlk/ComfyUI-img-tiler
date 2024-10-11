@@ -1,13 +1,12 @@
 import cv2
 import os
 from collections import defaultdict
-from .utils import torch_tensor_to_cv2_image,color_quantization,cv2_image_to_torch_tensor,get_all_directories,merge_tiles,get_processed_image_boxes,create_tiled_image,load_tiles,mode_color,resize_image
+from .utils import torch_tensor_to_cv2_image,color_quantization,cv2_image_to_torch_tensor,get_all_directories,merge_tiles,get_processed_image_boxes,create_tiled_image,load_tiles,mode_color,resize_image,find_most_common_scale,euclidean_distance,resize_and_crop,composite
 import re
 import json
 import numpy as np
 
 now_folder_path = os.path.dirname(__file__)
-
 
 tilesList=[]
 for dir in get_all_directories(
@@ -20,6 +19,7 @@ for dir in get_all_directories(
       "path":dir
     })
 
+default_resizing_scales="[0.8, 0.4, 0.2, 0.1]"
 class TilerSelect:
   @classmethod
   def INPUT_TYPES(cls):
@@ -31,7 +31,7 @@ class TilerSelect:
         "tile": (select_tile_options,
                           {"default": "square_50"}),
         "resizing_scales":("STRING",{
-            "default":"[0.5, 0.4, 0.3, 0.2, 0.1]"
+            "default":default_resizing_scales
         }),
       }
     }
@@ -64,6 +64,9 @@ class TilerImage:
         "overlap_tiles":("BOOLEAN",{
             "default":False
         }),
+        "auto_perfect_grid":("BOOLEAN",{
+            "default":True
+        }),
 
         "tile1":("Pc_Tiles",),
       }
@@ -73,11 +76,31 @@ class TilerImage:
   OUTPUT_IS_LIST = (False,)
   FUNCTION = "create_tiled_image"
   CATEGORY = "😱 PointAgiClub"
-  def create_tiled_image(self,image,overlap_tiles,**kwargs):
+  def create_tiled_image(self,image,overlap_tiles,auto_perfect_grid,**kwargs):
     tiles = defaultdict(list)
-
     for k, v in kwargs.items():
             tiles=merge_tiles(tiles,v)
+    tile_keys = list(tiles.keys())
+    
+    print(f'Tiles loaded: {len(tile_keys)} sizes: {tile_keys}')
+    if auto_perfect_grid:
+        most_common_size, non_multiple_sizes = find_most_common_scale(tile_keys)
+        if most_common_size is not None:
+            for point_b in non_multiple_sizes:
+                closest_point = min(
+                    [point_a for point_a in most_common_size if point_a < point_b],
+                    key=lambda point_a: euclidean_distance(point_b, point_a)
+                )
+                print(f"Closest point to {point_b} is {closest_point}")
+                # 调整 tiles  point_b to closest_point
+                for tile in tiles[point_b]:
+                    tile['tile'] =resize_and_crop(tile['tile'], closest_point[1], closest_point[0])
+                    mode, rel_freq = mode_color(tile['tile'], ignore_alpha=True)
+                    tile['mode'] = mode
+                    tile['rel_freq'] = rel_freq
+                tiles[closest_point] += tiles.pop(point_b)
+        print(list(tiles.keys()))
+
     image = torch_tensor_to_cv2_image(image)
     boxes, original_res = get_processed_image_boxes(image, tiles)
     img = create_tiled_image(boxes, original_res,overlap_tiles)
@@ -95,7 +118,7 @@ class TileMaker:
                 "depth": ("INT", {"default": 4, "min": 2, "max": 16}),
                 "rotations": ("STRING", {"default": "[0]"}),
                 "resizing_scales":("STRING",{
-                    "default":"[0.5, 0.4, 0.3, 0.2, 0.1]"
+                    "default":default_resizing_scales
                 }),
                 # "output_folder": ("STRING", {"default": "generated_images"}),
                 
@@ -179,13 +202,13 @@ class ImageListTileMaker:
                 "image": ("IMAGE",),
                 "rotations": ("STRING", {"default": "[0]"}),
                 "resizing_scales":("STRING",{
-                    "default":"[0.5, 0.4, 0.3, 0.2, 0.1]"
+                    "default":default_resizing_scales
                 }),
                 # "output_folder": ("STRING", {"default": "generated_images"}),
                 
             }
         }
-    INPUT_IS_LIST = (True,False,False,False)
+    INPUT_IS_LIST = True
     RETURN_TYPES = ("Pc_Tiles",)
     RETURN_NAMES = ("tile",)
     OUTPUT_IS_LIST = (False,)
@@ -239,3 +262,22 @@ class ImageListTileMaker:
                                 })
         return (tiles,)
     
+    
+    
+    
+
+class PC_TEST:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {
+                      "mask": ("MASK",),
+                    }
+                }
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("tile",)
+    OUTPUT_IS_LIST = (False,)
+    FUNCTION = "test"
+    CATEGORY =  "😱 PointAgiClub"
+    def test(self,**kwargs):
+        print(kwargs)
+        return "test"
