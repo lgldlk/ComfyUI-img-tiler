@@ -1,5 +1,5 @@
 
-from .tiler_comfy import TilerImage,TilerSelect,TileMaker,ImageListTileMaker,PC_TEST
+from .tiler_comfy import TilerImage,TilerSelect,TileMaker,ImageListTileMaker
 
 
 NODE_CLASS_MAPPINGS = {
@@ -8,7 +8,6 @@ NODE_CLASS_MAPPINGS = {
     "PC TilerSelect":TilerSelect,
     "PC TileMaker":TileMaker,
     "PC ImageListTileMaker":ImageListTileMaker,
-    "PC TEST":PC_TEST,
 
 }
 
@@ -17,7 +16,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "PC TilerSelect":"TilerSelect",
     "PC TileMaker":"TileMaker",
     "PC ImageListTileMaker":"ImageListTileMaker",
-    "PC TEST":"PC_TEST",
 }
 
 WEB_DIRECTORY='./web'

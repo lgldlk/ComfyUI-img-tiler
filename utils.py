@@ -274,6 +274,11 @@ def cv2_image_to_torch_tensor(cv2_image):
 
     return modified_image
 
+def add_alpha_channel(rgb_tensor, alpha_value=1.0):
+    batch_size, height, width, channels = rgb_tensor.shape
+    alpha_channel = torch.full((batch_size, height, width, 1), alpha_value)
+    rgba_tensor = torch.cat((rgb_tensor, alpha_channel), dim=-1)
+    return rgba_tensor
 
 def composite(destination, source, x, y, mask = None, multiplier = 8, resize_source = False):
     source = source.to(destination.device)
