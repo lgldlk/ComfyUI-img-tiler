@@ -4,7 +4,6 @@ app.registerExtension({
   name: "PointAgiClub.imgTiler",
   async beforeRegisterNodeDef(nodeType, nodeData, app) {
     if (nodeData.name === "PC TilerImage") {
-      console.log("beforeRegisterNodeDef", nodeData);
       var input_name = "tile";
 
       const onConnectionsChange = nodeType.prototype.onConnectionsChange;
@@ -14,9 +13,6 @@ app.registerExtension({
         connected,
         link_info
       ) {
-        console.log(arguments);
-        window.aaa = this;
-
         if (!link_info || link_info?.type !== "Pc_Tiles") return;
         const tileInput = this.inputs.filter((item) => item.name.match("tile"));
         if (!connected && tileInput.length > 1) {
