@@ -4,7 +4,7 @@
 # DEPTH = 4 -> 4 * 4 * 4 = 64 colors
 DEPTH = 6
 # list of rotations, in degrees, to apply over the original image
-ROTATIONS = [0]
+ROTATIONS = [90]
 
 
 #############################
@@ -18,18 +18,18 @@ COLOR_DEPTH = 32
 # Scale of the image to be tiled (1 = default resolution)
 IMAGE_SCALE = 1
 # tiles scales (1 = default resolution)
-RESIZING_SCALES = [0.6, 0.3,0.12, 0.1,]
+RESIZING_SCALES = [0.6, 0.4]
 # number of pixels shifted to create each box (tuple with (x,y))
 # if value is None, shift will be done accordingly to tiles dimensions
-PIXEL_SHIFT =None #(5, 5)
+PIXEL_SHIFT = None  # (5, 5)
 # if tiles can overlap
-OVERLAP_TILES = False
+OVERLAP_TILES = True
 
 # multiprocessing pool size
 POOL_SIZE = 8
 
 # out file name
-OUT = 'out.png'
+OUT = "out.png"
 # image to tile (ignored if passed as the 1st arg)
 IMAGE_TO_TILE = None
 # folder with tiles (ignored if passed as the 2nd arg)
